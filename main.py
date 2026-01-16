@@ -11,26 +11,58 @@ def main(page: ft.Page):
     # Your Firebase URL
     FIREBASE_URL = "https://productivity-71d06-default-rtdb.europe-west1.firebasedatabase.app/leaderboard.json"
 
-    # --- Data Fetching Logic ---
+    # --- Data Fetching Logic (Now with Math!) ---
     def get_data():
         try:
             r = requests.get(FIREBASE_URL).json()
             if not r: return []
             
-            users = []
-            for k, v in r.items():
-                dur = v.get("duration", "0 min")
-                try: mins = int(str(dur).split()[0])
+            # 1. Aggregate (Combine) the data by Username
+            user_stats = {}
+            
+            for v in r.values():
+                name = v.get("username", "Unknown")
+                dur_str = v.get("duration", "0 min")
+                task_count = v.get("task_count", 0)
+                
+                # Extract number of minutes
+                try: mins = int(str(dur_str).split()[0])
                 except: mins = 0
                 
-                users.append({
-                    "name": v.get("username", "Unknown"),
-                    "time": dur,
-                    "mins": mins,
-                    "tasks": v.get("task_count", 0)
+                # Initialize user if new
+                if name not in user_stats:
+                    user_stats[name] = {
+                        "name": name,
+                        "total_minutes": 0,
+                        "total_tasks": 0
+                    }
+                
+                # Add to totals
+                user_stats[name]["total_minutes"] += mins
+                user_stats[name]["total_tasks"] += task_count
+
+            # 2. Convert to List and Format
+            final_list = []
+            for name, stats in user_stats.items():
+                total_m = stats["total_minutes"]
+                
+                # Format: "1h 30m" or "45 min"
+                hours, minutes = divmod(total_m, 60)
+                if hours > 0:
+                    time_display = f"{hours}h {minutes}m"
+                else:
+                    time_display = f"{minutes} min"
+                
+                final_list.append({
+                    "name": name,
+                    "time": time_display,
+                    "mins": total_m, # Used for sorting
+                    "tasks": stats["total_tasks"]
                 })
-            # Sort High to Low
-            return sorted(users, key=lambda x: x['mins'], reverse=True)
+
+            # 3. Sort High to Low
+            return sorted(final_list, key=lambda x: x['mins'], reverse=True)
+
         except Exception as e:
             print(f"Error: {e}")
             return []
@@ -48,7 +80,7 @@ def main(page: ft.Page):
             return
 
         for i, u in enumerate(data):
-            # Rank Colors (Fixed for new Flet version)
+            # Rank Colors
             rank_color = ft.Colors.WHITE
             icon = ""
             if i == 0: 
@@ -62,7 +94,6 @@ def main(page: ft.Page):
             # Card UI
             card = ft.Container(
                 padding=15,
-                # used a Hex code with Alpha for transparency instead of helper function
                 bgcolor="#0DFFFFFF", 
                 border_radius=15,
                 content=ft.Row([
